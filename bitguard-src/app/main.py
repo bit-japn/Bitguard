@@ -3,13 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import base64
 
-from .database import SessionLocal, engine
-from . import models
+from app.database import SessionLocal, engine
+from app import models
 
 models.base.metadata.create_all(bind=engine)
 
-from .models import VaultEntry
-from .schemas import EntryCreate
+from app.models import VaultEntry
+from app.schemas import EntryCreate
 
 app = FastAPI(
     title="BitGuard API",
@@ -95,13 +95,17 @@ def delete_entry(entry_id: str, db: Session = Depends(get_db)):
 
     return {"status": "credenciales eliminadas"}
 
-# Uvicorn
+# Uvicorn and ping
+
+@app.get("/ping")
+def ping():
+    return {"status": "running"}
 
 import uvicorn
 
 if __name__ == "__main__":
     uvicorn.run(
-        "app.main:app",
+        app,
         host="127.0.0.1",
         port=8048,
         reload=False
