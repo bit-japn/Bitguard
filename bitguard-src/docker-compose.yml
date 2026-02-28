@@ -1,0 +1,28 @@
+# version: "3.9"
+
+services:
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: alpine
+      MYSQL_DATABASE: bgdb
+      MYSQL_USER: bgadmin
+      MYSQL_PASSWORD: mysqlpassword
+    # ports:
+    #  - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  api:
+    build: .
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: mysql+pymysql://bgadmin:mysqlpassword@db/bgdb
+    restart: always
+
+volumes:
+  mysql_data:

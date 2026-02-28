@@ -3,7 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import base64
 
-from .database import SessionLocal
+from .database import SessionLocal, engine
+from . import models
+
+models.Base.metadata.create_all(bind=engine)
+
 from .models import VaultEntry
 from .schemas import EntryCreate
 
