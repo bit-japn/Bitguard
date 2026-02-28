@@ -1,12 +1,9 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-import base64
-import json
 
 from app.database import SessionLocal, engine
 from app import models
-from app.crypto import encrypt, decrypt, get_key_b64
 
 models.base.metadata.create_all(bind=engine)
 
@@ -20,6 +17,7 @@ app = FastAPI(
 )
 
 # CORS (#TODO: restricciones)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -36,29 +34,16 @@ def get_db():
         db.close()
 
 
-# ── Key exchange ───────────────────────────────────────────────────────────────
-
-@app.get("/vault/key")
-def get_vault_key():
-    """
-    Returns the AES-256 key as base64 so the extension can encrypt locally.
-    ⚠  In production: protect this endpoint with authentication.
-    """
-    return {"key": get_key_b64()}
-
-
-# ── Entries ────────────────────────────────────────────────────────────────────
-
+# CREATE
 @app.post("/vault/entries")
 def create_entry(entry: EntryCreate, db: Session = Depends(get_db)):
-    # The extension sends data as base64(iv + ciphertext) — store as binary
-    # Fix: vault_id and entry_id were swapped in the original code
-    binary_data = base64.b64decode(entry.data)
 
     db_entry = VaultEntry(
-        vault_id=entry.vault_id,   # ← fixed (was entry.entry_id)
-        entry_id=entry.entry_id,   # ← fixed (was entry.vault_id)
-        data=binary_data
+        vault_id=entry.vault_id,
+        entry_id=entry.entry_id,
+        url=entry.url,
+        usr=entry.usr,
+        pwd=entry.pwd
     )
 
     db.add(db_entry)
@@ -67,8 +52,10 @@ def create_entry(entry: EntryCreate, db: Session = Depends(get_db)):
     return {"status": "credenciales guardadas"}
 
 
+# READ
 @app.get("/vault/entries/{vault_id}")
 def get_entries(vault_id: str, db: Session = Depends(get_db)):
+
     entries = db.query(VaultEntry).filter(
         VaultEntry.vault_id == vault_id
     ).all()
@@ -76,28 +63,21 @@ def get_entries(vault_id: str, db: Session = Depends(get_db)):
     result = []
 
     for e in entries:
-        # Re-encode binary → base64 for decryption
-        data_b64 = base64.b64encode(e.data).decode("utf-8")
-
-        try:
-            plaintext = decrypt(data_b64)
-            parsed = json.loads(plaintext)
-        except Exception as ex:
-            # If decryption fails (e.g. old unencrypted entries), return raw
-            parsed = {"_raw": data_b64, "_error": str(ex)}
-
         result.append({
             "vault_id": e.vault_id,
             "entry_id": e.entry_id,
-            "created_at": e.created_at,
-            "data": parsed   # ← now returns decrypted {url, user, password}
+            "url": e.url,
+            "usr": e.usr,
+            "pwd": e.pwd
         })
 
     return result
 
 
+# UPDATE
 @app.put("/vault/entries/{entry_id}")
 def update_entry(entry_id: str, entry: EntryCreate, db: Session = Depends(get_db)):
+
     db_entry = db.query(VaultEntry).filter(
         VaultEntry.entry_id == entry_id
     ).first()
@@ -105,14 +85,19 @@ def update_entry(entry_id: str, entry: EntryCreate, db: Session = Depends(get_db
     if not db_entry:
         raise HTTPException(status_code=404, detail="Entrada no encontrada")
 
-    db_entry.data = base64.b64decode(entry.data)
+    db_entry.url = entry.url
+    db_entry.usr = entry.usr
+    db_entry.pwd = entry.pwd
+
     db.commit()
 
     return {"status": "credenciales actualizadas"}
 
 
+# DELETE
 @app.delete("/vault/entries/{entry_id}")
 def delete_entry(entry_id: str, db: Session = Depends(get_db)):
+
     db_entry = db.query(VaultEntry).filter(
         VaultEntry.entry_id == entry_id
     ).first()
@@ -126,7 +111,7 @@ def delete_entry(entry_id: str, db: Session = Depends(get_db)):
     return {"status": "credenciales eliminadas"}
 
 
-# ── Ping ───────────────────────────────────────────────────────────────────────
+# Uvicorn and ping
 
 @app.get("/ping")
 def ping():

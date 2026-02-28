@@ -9,7 +9,9 @@ class VaultEntry(base):
 
     vault_id = Column(String(36), index=True, nullable=False)
     entry_id = Column(String(36), primary_key=True, index=True)
-    data = Column(LargeBinary, nullable=False)
+    url = Column(String(36), index=True, nullable=False)
+    usr = Column(String(36), index=True, nullable=False)
+    pwd = Column(String(36), index=True, nullable=False)
 
     created_at = Column(DateTime(timezone=True),
                         server_default=func.now())

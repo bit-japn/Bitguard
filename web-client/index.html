@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vault</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <div class="background-gradient"></div>
+
+    <header class="header glass">
+        <div class="logo">🔐 Vault</div>
+        <input type="text" id="searchInput" placeholder="Buscar contraseñas...">
+    </header>
+
+    <main class="container glass">
+        <table>
+            <thead>
+                <tr>
+                    <th>Web</th>
+                    <th>Usuario</th>
+                    <th>Contraseña</th>
+                    <th>Última modificación</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </main>
+
+    <footer class="footer glass">
+        BitGuard • 2026
+    </footer>
+
+    <script src="index.js"></script>
+</body>
+
+</html>
