@@ -53,12 +53,10 @@ def create_entry(entry: EntryCreate, db: Session = Depends(get_db)):
 
 
 # READ
-@app.get("/vault/entries/{vault_id}")
-def get_entries(vault_id: str, db: Session = Depends(get_db)):
+@app.get("/vault/entries")
+def get_entries(db: Session = Depends(get_db)):
 
-    entries = db.query(VaultEntry).filter(
-        VaultEntry.vault_id == vault_id
-    ).all()
+    entries = db.query(VaultEntry).all()
 
     result = []
 

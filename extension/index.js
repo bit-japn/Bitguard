@@ -1,9 +1,46 @@
-const API_URL = "http://127.0.0.1:8048/vault/entries/10213333";
+const API_URL = "http://127.0.0.1:8048/vault/entries";
 
 const tableBody = document.getElementById("tableBody");
 const searchInput = document.getElementById("searchInput");
 
 let credentials = [];
+
+let cryptoKey = null;  // ← null, not a string
+
+let resolveKeyReady;
+const keyReady = new Promise(resolve => { resolveKeyReady = resolve; });
+
+window.addEventListener("message", async (event) => {
+    if (event.data?.type === "VAULT_AES_KEY") {
+        const rawKeyBytes = Uint8Array.from(atob(event.data.keyBase64), c => c.charCodeAt(0));
+        cryptoKey = await crypto.subtle.importKey(
+            "raw", rawKeyBytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]
+        );
+        console.log("Vault got the crypto key!");
+        resolveKeyReady();
+        renderTable(credentials);
+    }
+});
+
+async function getEncryptionKey() {
+    if (cryptoKey instanceof CryptoKey) return cryptoKey; // ← type-safe check
+    await keyReady;
+    return cryptoKey;
+}
+
+(async () => {
+    const cryptoKey = await getEncryptionKey();
+    console.log("CryptoKey:", cryptoKey);
+
+    credentials.forEach(async (cred) => {
+        try {
+            const decrypted = await decryptField(cred.pwd, cryptoKey);
+            console.log("Decrypted pwd:", decrypted);
+        } catch (e) {
+            console.log("Decrypt error:", e);
+        }
+    });
+})();
 
 // Fetch
 async function fetchCredentials() {
@@ -99,32 +136,29 @@ function renderTable(data) {
         eyeBtn.addEventListener("click", async () => {
 
             if (!decryptedCache) {
-                const cryptoKey = await getEncryptionKey();
-                if (!cryptoKey) {
-                    passwordText.textContent = "No key";
-                    return;
-                }
-
-                try {
-                    const parsed = JSON.parse(cred.data || "{}");
-                    decryptedCache = await decryptField(
-                        parsed.encrypted_password,
-                        cryptoKey
-                    );
-                } catch (e) {
-                    passwordText.textContent = "Decrypt error";
-                    return;
-                }
+              const cryptoKey = await getEncryptionKey();
+              if (!cryptoKey) {
+                passwordText.textContent = "No key";
+                return;
+              }
+          
+              try {
+                // Decrypt directly from cred.pwd column
+                decryptedCache = await decryptField(cred.pwd, cryptoKey);
+              } catch (e) {
+                passwordText.textContent = "Decrypt error";
+                return;
+              }
             }
-
+          
             visible = !visible;
-
+          
             passwordText.textContent = visible
-                ? decryptedCache
-                : "••••••••";
-
-            eyeBtn.textContent = visible ? eyeClosedSVG() : eyeOpenSVG();
-        });
+                ? decryptedCache       // show plaintext when revealed
+                : "••••••••";          // hide when toggled off
+          
+            eyeBtn.innerHTML = visible ? eyeClosedSVG() : eyeOpenSVG();
+          });
 
         tableBody.appendChild(row);
     });
@@ -132,51 +166,7 @@ function renderTable(data) {
 
 // Passwords
 
-async function decryptField(base64Data, cryptoKey) {
-    try {
-        const combined = Uint8Array.from(
-            atob(base64Data),
-            c => c.charCodeAt(0)
-        );
-
-        const iv = combined.slice(0, 12);
-        const ciphertext = combined.slice(12);
-
-        const decrypted = await crypto.subtle.decrypt(
-            { name: "AES-GCM", iv },
-            cryptoKey,
-            ciphertext
-        );
-
-        return new TextDecoder().decode(decrypted);
-    } catch (e) {
-        console.error("Decryption failed:", e);
-        return "⚠ Decrypt error";
-    }
-}
-async function getEncryptionKey() {
-    return new Promise((resolve) => {
-        chrome.storage.local.get("encKeyRaw", async (stored) => {
-
-            if (!stored.encKeyRaw) {
-                resolve(null);
-                return;
-            }
-
-            const rawKey = new Uint8Array(stored.encKeyRaw);
-
-            const key = await crypto.subtle.importKey(
-                "raw",
-                rawKey,
-                { name: "AES-GCM" },
-                false,
-                ["decrypt"]
-            );
-
-            resolve(key);
-        });
-    });
-}
+// todo
 
 // Search
 searchInput.addEventListener("input", () => {
