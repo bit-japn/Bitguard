@@ -94,3 +94,15 @@ def delete_entry(entry_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "credenciales eliminadas"}
+
+# Uvicorn
+
+import uvicorn
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8048,
+        reload=False
+    )
