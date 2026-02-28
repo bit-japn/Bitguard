@@ -31,6 +31,23 @@ async function fetchCredentials() {
     }
 }
 
+function eyeOpenSVG() {
+    return `
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+    </svg>`;
+}
+
+function eyeClosedSVG() {
+    return `
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M17.94 17.94A10.94 10.94 0 0112 20C5 20 1 12 1 12a21.77 21.77 0 015.06-6.94"/>
+        <path d="M22.54 11.88A21.85 21.85 0 0023 12s-4 8-11 8a10.94 10.94 0 01-4.94-1.06"/>
+        <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>`;
+}
+
 // Render
 function renderTable(data) {
     tableBody.innerHTML = "";
@@ -56,7 +73,12 @@ function renderTable(data) {
                 </div>
             </td>
             <td>${usr}</td>
-            <td>••••••••</td>
+            <td>
+                <div class="password-cell">
+                    <span class="password-text">••••••••</span>
+                    <button class="eye-btn">👁</button>
+                </div>
+            </td>
             <td>
                 <div class="tooltip">
                     ${timeAgo(updated)}
@@ -68,7 +90,91 @@ function renderTable(data) {
             </td>
         `;
 
+        const eyeBtn = row.querySelector(".eye-btn");
+        const passwordText = row.querySelector(".password-text");
+
+        let decryptedCache = null;
+        let visible = false;
+
+        eyeBtn.addEventListener("click", async () => {
+
+            if (!decryptedCache) {
+                const cryptoKey = await getEncryptionKey();
+                if (!cryptoKey) {
+                    passwordText.textContent = "No key";
+                    return;
+                }
+
+                try {
+                    const parsed = JSON.parse(cred.data || "{}");
+                    decryptedCache = await decryptField(
+                        parsed.encrypted_password,
+                        cryptoKey
+                    );
+                } catch (e) {
+                    passwordText.textContent = "Decrypt error";
+                    return;
+                }
+            }
+
+            visible = !visible;
+
+            passwordText.textContent = visible
+                ? decryptedCache
+                : "••••••••";
+
+            eyeBtn.textContent = visible ? eyeClosedSVG() : eyeOpenSVG();
+        });
+
         tableBody.appendChild(row);
+    });
+}
+
+// Passwords
+
+async function decryptField(base64Data, cryptoKey) {
+    try {
+        const combined = Uint8Array.from(
+            atob(base64Data),
+            c => c.charCodeAt(0)
+        );
+
+        const iv = combined.slice(0, 12);
+        const ciphertext = combined.slice(12);
+
+        const decrypted = await crypto.subtle.decrypt(
+            { name: "AES-GCM", iv },
+            cryptoKey,
+            ciphertext
+        );
+
+        return new TextDecoder().decode(decrypted);
+    } catch (e) {
+        console.error("Decryption failed:", e);
+        return "⚠ Decrypt error";
+    }
+}
+async function getEncryptionKey() {
+    return new Promise((resolve) => {
+        chrome.storage.local.get("encKeyRaw", async (stored) => {
+
+            if (!stored.encKeyRaw) {
+                resolve(null);
+                return;
+            }
+
+            const rawKey = new Uint8Array(stored.encKeyRaw);
+
+            const key = await crypto.subtle.importKey(
+                "raw",
+                rawKey,
+                { name: "AES-GCM" },
+                false,
+                ["decrypt"]
+            );
+
+            resolve(key);
+        });
     });
 }
 

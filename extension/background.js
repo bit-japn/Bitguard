@@ -91,10 +91,8 @@ async function saveToVault(creds) {
     vault_id: vaultId,
     entry_id: entryId,
     url:      creds.url,  // plain — intentionally not encrypted
-    data:     JSON.stringify({
-      encrypted_user:     encryptedUser,      // AES-256-GCM, individually encrypted
-      encrypted_password: encryptedPassword   // AES-256-GCM, individually encrypted
-    })
+    usr:      encryptedUser,      // AES-256-GCM, individually encrypted
+    pwd:      encryptedPassword   // AES-256-GCM, individually encrypted
   };
 
   const res = await fetch(`${API_BASE}/vault/entries`, {
