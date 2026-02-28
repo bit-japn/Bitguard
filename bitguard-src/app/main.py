@@ -6,7 +6,7 @@ import base64
 from .database import SessionLocal, engine
 from . import models
 
-models.Base.metadata.create_all(bind=engine)
+models.base.metadata.create_all(bind=engine)
 
 from .models import VaultEntry
 from .schemas import EntryCreate
