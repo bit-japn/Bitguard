@@ -5,10 +5,14 @@ const searchInput = document.getElementById("searchInput");
 
 let credentials = [];
 
-let cryptoKey = null;  // ← null, not a string
+let cryptoKey = null;
 
 let resolveKeyReady;
 const keyReady = new Promise(resolve => { resolveKeyReady = resolve; });
+
+window.addEventListener("message", (event) => {
+        console.log("AES Key:", event.data.encKeyRaw);
+});
 
 window.addEventListener("message", async (event) => {
     if (event.data?.type === "VAULT_AES_KEY") {
@@ -20,7 +24,11 @@ window.addEventListener("message", async (event) => {
         resolveKeyReady();
         renderTable(credentials);
     }
+
+    console.log(cryptoKey);
 });
+
+window.postMessage({ type: "REQUEST_AES_KEY" }, "*");
 
 async function getEncryptionKey() {
     if (cryptoKey instanceof CryptoKey) return cryptoKey; // ← type-safe check
@@ -42,22 +50,51 @@ async function getEncryptionKey() {
     });
 })();
 
+async function decryptField(base64Data, cryptoKey) {
+    const combined = Uint8Array.from(atob(base64Data), c =>
+        c.charCodeAt(0)
+    );
+
+    const iv = combined.slice(0, 12);
+    const ciphertext = combined.slice(12);
+
+    const decrypted = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv },
+        cryptoKey,
+        ciphertext
+    );
+
+    return new TextDecoder().decode(decrypted);
+}
+
 // Fetch
 async function fetchCredentials() {
     try {
         const res = await fetch(API_URL);
         const raw = await res.json();
 
-        console.log("API RESPONSE:", raw);
-
-        // Support both direct array OR wrapped {data: [...]}
-        credentials = Array.isArray(raw) ? raw :
-            raw.data ? raw.data :
-                [];
+        credentials = Array.isArray(raw)
+            ? raw
+            : raw.data
+                ? raw.data
+                : [];
 
         if (!credentials.length) {
             tableBody.innerHTML = `<tr><td colspan="4">No credentials found.</td></tr>`;
             return;
+        }
+
+        // Wait for AES key before decrypting
+        const cryptoKey = await getEncryptionKey();
+
+        // Decrypt usernames immediately
+        for (const cred of credentials) {
+            try {
+                cred.usr = await decryptField(cred.usr, cryptoKey);
+            } catch (e) {
+                console.error("Username decrypt failed:", e);
+                cred.usr = "[decrypt error]";
+            }
         }
 
         renderTable(credentials);
@@ -229,4 +266,6 @@ setInterval(() => {
     renderTable(credentials);
 }, 60000);
 
-fetchCredentials();
+document.addEventListener("DOMContentLoaded", () => {
+    fetchCredentials();
+});

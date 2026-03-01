@@ -3,11 +3,22 @@
   "name": "BitGuard",
   "version": "0.4.0",
   "description": "Detects login forms and securely saves credentials to your vault.",
-  "permissions": ["activeTab", "scripting", "storage", "tabs", "windows", "notifications"],
+
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "windows",
+    "notifications"
+  ],
+
   "host_permissions": [
     "https://api.pwnedpasswords.com/*",
-    "http://127.0.0.1:8048/*"
+    "http://127.0.0.1:8048/*",
+    "http://127.0.0.1:3000/*"
   ],
+
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -15,6 +26,7 @@
       "48": "icons/icon48.png"
     }
   },
+
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
@@ -22,6 +34,7 @@
       "run_at": "document_idle"
     }
   ],
+
   "background": {
     "service_worker": "background.js"
   }
