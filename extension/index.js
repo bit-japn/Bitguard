@@ -60,22 +60,25 @@ async function fetchCredentials() {
         }
 
         // Wait for AES key before decrypting
-        const cryptoKey = await getEncryptionKey();
+        // const cryptoKey = await getEncryptionKey();
 
         // Decrypt usernames immediately
-        for (const cred of credentials) {
+        /*for (const cred of credentials) {
             try {
                 cred.usr = await decryptField(cred.usr, cryptoKey);
             } catch (e) {
                 console.error("Username decrypt failed:", e);
                 cred.usr = "[decrypt error]";
             }
-        }
+        }*/
+
+        console.log("holaaaaaaaaaaaaaa");
 
         renderTable(credentials);
 
     } catch (err) {
         console.error("Fetch error:", err);
+        console
         tableBody.innerHTML = `<tr><td colspan="4">Connection error.</td></tr>`;
     }
 }
@@ -241,6 +244,7 @@ setInterval(() => {
     renderTable(credentials);
 }, 60000);
 
-document.addEventListener("DOMContentLoaded", () => {
+chrome.tabs.onUpdated.addListener(() => {
+
     fetchCredentials();
 });

@@ -139,3 +139,49 @@ generatedPassDisplay.addEventListener("click", async () => {
     setTimeout(() => generatedPassDisplay.textContent = pw, 1500);
   }
 });
+
+async function findURL() {
+
+  const API_URL = "http://127.0.0.1:8048/";
+
+  console.log("hello ")
+
+  try {
+    const res = await fetch(API_URL);
+    const raw = await res.json();
+
+    credentials = Array.isArray(raw)
+      ? raw
+      : raw.data
+        ? raw.data
+        : [];
+
+    if (!credentials.length) {
+      tableBody.innerHTML = `<tr><td colspan="4">No credentials found.</td></tr>`;
+      return;
+    }
+
+    // Wait for AES key before decrypting
+    const cryptoKey = await getEncryptionKey();
+
+    // Decrypt usernames immediately
+    for (const cred of credentials) {
+      try {
+        cred.usr = await decryptField(cred.usr, cryptoKey);
+      } catch (e) {
+        console.error("Username decrypt failed:", e);
+        cred.usr = "[decrypt error]";
+      }
+    }
+
+    renderTable(credentials);
+
+  } catch (err) {
+    console.error("Fetch error:", err);
+    tableBody.innerHTML = `<tr><td colspan="4">Connection error.</td></tr>`;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  findURL();
+});

@@ -70,10 +70,8 @@ async function saveToVault(creds) {
         vault_id: vaultId,
         entry_id: entryId,
         url: creds.url,
-        data: JSON.stringify({
-            encrypted_user: encryptedUser,
-            encrypted_password: encryptedPassword
-        })
+        usr: encryptedUser,
+        pwd: encryptedPassword
     };
 
     const res = await fetch(`${API_BASE}/vault/entries`, {
@@ -192,3 +190,85 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
     }
 });
+
+chrome.tabs.onUpdated.addListener(() => {
+
+  findURL();
+})
+
+async function findURL() {
+
+  const API_URL = "http://127.0.0.1:8048/vault/entries";
+
+  console.log("hello ")
+
+  try {
+    const res = await fetch(API_URL);
+    const raw = await res.json();
+
+    credentials = Array.isArray(raw)
+      ? raw
+      : raw.data
+        ? raw.data
+        : [];
+
+    if (!credentials.length) {
+      console.log("not found");
+      return;
+    }
+
+    chrome.tabs.query({
+        active: true,
+        currentWindow: true
+    },
+
+    
+        (tabs) => {
+
+            const activeTab = tabs[0];
+            const activeTabUrl = activeTab.url;
+
+            const realURL = new URL(activeTabUrl);
+
+            const hostname = realURL.hostname.replace(/^www\./, '');
+
+            const hasURL = credentials.find((item) =>
+                item.url.replace(/^www\./, '') === hostname
+            );
+
+            
+
+            console.log(hasURL);
+
+            if (hasURL) {
+                console.log("Match found:", hasURL);
+
+                chrome.scripting.executeScript({
+                    target: { tabId: activeTab.id },
+                    func: (username, password) => {
+                        const userInput =
+                            document.querySelector('input[type="email"]') ||
+                            document.querySelector('input[type="text"]');
+
+                        const passInput =
+                            document.querySelector('input[type="password"]');
+
+                        if (userInput) userInput.value = username;
+                        if (passInput) passInput.value = password;
+                    },
+                    args: [hasURL.usr, hasURL.pwd],
+                });
+            } else {
+                console.log("No matching credentials found.");
+            }
+        }
+    
+
+    )
+
+  } catch (err) {
+    console.error("Fetch error:", err);
+    tableBody.innerHTML = `<tr><td colspan="4">Connection error.</td></tr>`;
+  }
+}
+

@@ -5,8 +5,7 @@
   "description": "Detects login forms and securely saves credentials to your vault.",
   "permissions": ["activeTab", "scripting", "storage", "tabs"],
   "host_permissions": [
-    "https://api.pwnedpasswords.com/*",
-    "http://127.0.0.1:8048/*"
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",
