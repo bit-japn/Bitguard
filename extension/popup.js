@@ -22,20 +22,20 @@ const errorMsg   = document.getElementById("error-msg");
 
 let currentCreds = null;
 
-// ── Load and display detected credentials ────────────────────────────────────
-async function loadPendingCreds(pendingCreds) {
+// ── On open: check for pending credentials ──────────────────────────────────
+chrome.storage.local.get(["pendingCreds"], async ({ pendingCreds }) => {
+  if (!pendingCreds) {
+    showScreen("idle");
+    return;
+  }
+
   currentCreds = pendingCreds;
   showScreen("detected");
 
+  // Display fields
   dispUrl.textContent  = truncateUrl(pendingCreds.url);
   dispUser.textContent = pendingCreds.user || "Unknown";
   dispPass.textContent = maskPassword(pendingCreds.password);
-
-  // Reset pwned warning
-  pwnedWarn.style.display = "none";
-  saveBtn.disabled = false;
-  saveBtn.innerHTML = "Save to vault";
-  errorMsg.style.display = "none";
 
   // Check pwned in background
   const result = await chrome.runtime.sendMessage({
@@ -46,23 +46,6 @@ async function loadPendingCreds(pendingCreds) {
   if (result && result.pwned) {
     pwnedCount.textContent = result.count.toLocaleString();
     pwnedWarn.style.display = "block";
-  }
-}
-
-// ── On open: check for pending credentials ──────────────────────────────────
-chrome.storage.local.get(["pendingCreds"], async ({ pendingCreds }) => {
-  if (!pendingCreds) {
-    showScreen("idle");
-  } else {
-    await loadPendingCreds(pendingCreds);
-  }
-});
-
-// ── React live if credentials arrive while popup is already open ─────────────
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== "local") return;
-  if (changes.pendingCreds && changes.pendingCreds.newValue) {
-    loadPendingCreds(changes.pendingCreds.newValue);
   }
 });
 
@@ -133,6 +116,12 @@ function generatePassword(length = 16) {
 generateBtn.addEventListener("click", () => {
   const pw = generatePassword();
   generatedPassDisplay.textContent = pw;
+  // also send to the active tab so page can fill its password input
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (tab && tab.id != null) {
+      chrome.tabs.sendMessage(tab.id, { action: "fillPassword", password: pw });
+    }
+  });
 });
 
 // Copiar contraseña al portapapeles

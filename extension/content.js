@@ -47,7 +47,7 @@
 
   // Catch forms injected dynamically (SPAs)
   const observer = new MutationObserver(() => scanAllForms());
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.body, { childList: true, subtree: true });
 
   // Also listen for click on submit buttons (some forms skip submit event)
   document.addEventListener("click", (e) => {
@@ -65,41 +65,16 @@
   }, true);
 })();
 
-window.addEventListener("message", async (event) => {
-  // Only allow same window messages
-  if (event.source !== window) return;
-
-  // IMPORTANT: Restrict origin (DO NOT use "*")
-  if (event.origin !== "http://127.0.0.1:3000") return;
-
-  if (event.data?.type === "REQUEST_AES_KEY") {
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: "EXPORT_AES_KEY"
-      });
-
-      if (response?.success) {
-        window.postMessage(
-          {
-            type: "VAULT_AES_KEY",
-            keyBase64: response.keyBase64
-          },
-          "http://127.0.0.1:3000"   // restrict target origin
-        );
-      }
-
-    } catch (err) {
-      console.error("Failed to get AES key:", err);
+// ── Receive messages from popup for password filling ─────────────────────────
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg && msg.action === "fillPassword" && typeof msg.password === "string") {
+    const inputs = Array.from(document.querySelectorAll('input[type="password"]'));
+    if (inputs.length > 0) {
+      const input = inputs[0];
+      input.focus();
+      input.value = msg.password;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
     }
-  }
-});
-
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === "GLOBAL_AES_KEY") {
-    window.postMessage({
-      type: "GLOBAL_AES_KEY",
-      keyBase64: message.keyBase64
-    }, "*");
   }
 });
