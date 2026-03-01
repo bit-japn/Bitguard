@@ -23,6 +23,19 @@ cd bitguard-src
 call venv\\Scripts\\activate
 python main.py
 `
+
+venv might cause issues so make sure you're on its environment first:
+
+`source .venv/bin/activate` on Linux, `call venv\Scripts\activate` on Windows.
+
+And then `ùvicorn app.main:app --reload` from bitguard-src.
+
+Alternatively, you can use the Releases binaries, run them to start the API, and then run the Vault pswd manager on port 3000 with:
+
+`python3 -m http.server 3000`
+
+If the installer doesn't work for you, you can also use Pyinstaller to compile your own binaries, from the app directory.
+
 ## Inspiration
 Nos hemos inspirado en algunas aplicaciones cotidianas, que usamos en nuestro día a día, tanto para generar contraseñas como para guardarlas en un gestor, para poder llevar a cabo el reto propuesto por Gradiant.
 ## What it does
@@ -37,5 +50,6 @@ Estamos orgullosos de como ha quedado el proyecto en general, pero sobretodo, de
 Hemos aprendido a realizar una extensión en Chrome, algo totalmente para nosotros.
 ## What's next for BitGuard
 Nuestra intención es seguir aprendiendo, disfrutando con nuestros amigos y programando cada vez mejor para lograr obtener los mejores resultados.
+
 
 
