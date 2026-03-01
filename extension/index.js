@@ -78,7 +78,6 @@ async function fetchCredentials() {
 
     } catch (err) {
         console.error("Fetch error:", err);
-        console
         tableBody.innerHTML = `<tr><td colspan="4">Connection error.</td></tr>`;
     }
 }
@@ -244,7 +243,6 @@ setInterval(() => {
     renderTable(credentials);
 }, 60000);
 
-chrome.tabs.onUpdated.addListener(() => {
-
+document.addEventListener("DOMContentLoaded", () => {
     fetchCredentials();
 });
