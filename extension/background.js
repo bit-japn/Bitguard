@@ -7,15 +7,94 @@ const VAULT_ORIGIN = "http://localhost:3000";
 // 1. Criptografía y Seguridad (Core V1)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// The encryption key is stored in chrome.storage.local as a raw byte array.
+// On first run we generate a new AES‑GCM key and persist it; afterwards we
+// import the same bytes so the key is stable across browser restarts.
 async function getOrCreateEncryptionKey() {
-    // Aquí iría tu lógica de recuperar o generar la llave
-    // Asumimos que ya tienes una función que obtiene la llave del almacenamiento
-    // o la deriva de una contraseña maestra/valor local.
-    // ... tu implementación actual de getOrCreateEncryptionKey ...
+    const stored = await chrome.storage.local.get("encKeyRaw");
+
+    if (stored.encKeyRaw) {
+        const rawKey = new Uint8Array(stored.encKeyRaw);
+        return crypto.subtle.importKey(
+            "raw", rawKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]
+        );
+    }
+
+    // first launch – generate+persist
+    const cryptoKey = await crypto.subtle.generateKey(
+        { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+    );
+    const rawKey = await crypto.subtle.exportKey("raw", cryptoKey);
+    await chrome.storage.local.set({ encKeyRaw: Array.from(new Uint8Array(rawKey)) });
+    return cryptoKey;
 }
 
+// decrypts a single field previously encrypted with `encryptField` below
 async function decryptField(encryptedPayload, cryptoKey) {
-    // ... tu implementación de descifrado V1 ...
+    const combined = Uint8Array.from(atob(encryptedPayload), c => c.charCodeAt(0));
+    const iv = combined.slice(0, 12);
+    const ciphertext = combined.slice(12);
+
+    const decrypted = await crypto.subtle.decrypt(
+        { name: "AES-GCM", iv },
+        cryptoKey,
+        ciphertext
+    );
+
+    return new TextDecoder().decode(decrypted);
+}
+
+// mirror of vault page's decryptField; needed when background saves entries
+async function encryptField(plaintext, cryptoKey) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(plaintext);
+    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, cryptoKey, encoded);
+
+    const combined = new Uint8Array(iv.byteLength + ciphertext.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(ciphertext), iv.byteLength);
+    return btoa(String.fromCharCode(...combined));
+}
+
+// helper used when the extension saves a new login; encrypts fields and POSTs to the
+// backend API exactly the same way the original app expects.
+async function saveToVault(creds) {
+    const cryptoKey = await getOrCreateEncryptionKey();
+    const encryptedUser = await encryptField(creds.user ?? "", cryptoKey);
+    const encryptedPassword = await encryptField(creds.password ?? "", cryptoKey);
+
+    const vaultId = await getOrCreateVaultId();
+    const entryId = crypto.randomUUID();
+
+    const body = {
+        vault_id: vaultId,
+        entry_id: entryId,
+        url: creds.url,
+        data: JSON.stringify({
+            encrypted_user: encryptedUser,
+            encrypted_password: encryptedPassword
+        })
+    };
+
+    const res = await fetch(`${API_BASE}/vault/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error(`API error ${res.status}: ${detail}`);
+    }
+    return await res.json();
+}
+
+async function getOrCreateVaultId() {
+    const stored = await chrome.storage.local.get("vaultId");
+    if (stored.vaultId) return stored.vaultId;
+    const newId = crypto.randomUUID();
+    await chrome.storage.local.set({ vaultId: newId });
+    return newId;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,7 +106,8 @@ async function sha1(str) {
     const hashBuffer = await crypto.subtle.digest("SHA-1", buffer);
     return Array.from(new Uint8Array(hashBuffer))
         .map(b => b.toString(16).padStart(2, "0"))
-        .join("").toUpperCase();
+        .join("")
+        .toUpperCase();
 }
 
 async function checkPwned(password) {
@@ -61,12 +141,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "CHECK_AND_SAVE") {
         (async () => {
             const pwnedResult = await checkPwned(message.payload.password);
-            // Aquí llamarías a tu lógica de guardado
+            try {
+                await saveToVault(message.payload);
+            } catch (err) {
+                console.error("Failed to save entry:", err);
+                sendResponse({ success: false, error: err.message, pwned: pwnedResult });
+                return;
+            }
             chrome.storage.local.remove("pendingCreds");
             chrome.action.setBadgeText({ text: "" });
             sendResponse({ success: true, pwned: pwnedResult });
         })();
         return true; 
+    }
+
+    // helper used by popup before saving, just perform HIBP without clearing state
+    if (message.type === "CHECK_PWNED_ONLY") {
+        (async () => {
+            const pwnedResult = await checkPwned(message.payload.password);
+            sendResponse(pwnedResult);
+        })();
+        return true;
+    }
+
+    // dismiss button in popup clicked
+    if (message.type === "DISMISS") {
+        chrome.storage.local.remove("pendingCreds");
+        chrome.action.setBadgeText({ text: "" });
+        return; // synchronous
     }
 
     // C. FLUJO DE SEGURIDAD/LLAVE (V1 - Protegido)

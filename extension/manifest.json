@@ -20,6 +20,11 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://localhost:3000/*"],
+      "js": ["content-bridge.js"],
+      "run_at": "document_idle"
     }
   ],
   "background": {

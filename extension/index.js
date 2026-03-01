@@ -7,48 +7,23 @@ let credentials = [];
 
 let cryptoKey = null;
 
-let resolveKeyReady;
-const keyReady = new Promise(resolve => { resolveKeyReady = resolve; });
-
-window.addEventListener("message", (event) => {
-        console.log("AES Key:", event.data.encKeyRaw);
-});
-
-window.addEventListener("message", async (event) => {
-    if (event.data?.type === "VAULT_AES_KEY") {
-        const rawKeyBytes = Uint8Array.from(atob(event.data.keyBase64), c => c.charCodeAt(0));
-        cryptoKey = await crypto.subtle.importKey(
-            "raw", rawKeyBytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]
-        );
-        console.log("Vault got the crypto key!");
-        resolveKeyReady();
-        renderTable(credentials);
-    }
-
-    console.log(cryptoKey);
-});
-
-window.postMessage({ type: "REQUEST_AES_KEY" }, "*");
-
-async function getEncryptionKey() {
-    if (cryptoKey instanceof CryptoKey) return cryptoKey; // ← type-safe check
-    await keyReady;
-    return cryptoKey;
+// Ask background for AES key via runtime messaging (vault is part of extension).
+async function requestKeyFromBackground() {
+    const resp = await chrome.runtime.sendMessage({ type: "REQUEST_AES_KEY_FROM_VAULT" });
+    if (resp && resp.success && resp.keyBase64) return resp.keyBase64;
+    throw new Error("failed to obtain AES key from background");
 }
 
-(async () => {
-    const cryptoKey = await getEncryptionKey();
-    console.log("CryptoKey:", cryptoKey);
-
-    credentials.forEach(async (cred) => {
-        try {
-            const decrypted = await decryptField(cred.pwd, cryptoKey);
-            console.log("Decrypted pwd:", decrypted);
-        } catch (e) {
-            console.log("Decrypt error:", e);
-        }
-    });
-})();
+async function getEncryptionKey() {
+    if (cryptoKey instanceof CryptoKey) return cryptoKey;
+    const keyBase64 = await requestKeyFromBackground();
+    const rawKeyBytes = Uint8Array.from(atob(keyBase64), c => c.charCodeAt(0));
+    cryptoKey = await crypto.subtle.importKey(
+        "raw", rawKeyBytes, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]
+    );
+    console.log("Vault got the crypto key!");
+    return cryptoKey;
+}
 
 async function decryptField(base64Data, cryptoKey) {
     const combined = Uint8Array.from(atob(base64Data), c =>
