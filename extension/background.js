@@ -61,19 +61,61 @@ async function getOrCreateEncryptionKey() {
     );
   }
 
-  const cryptoKey = await crypto.subtle.generateKey(
+  // Obtener 32 bytes aleatorios cuánticos desde CESGA QRNG
+  const rawKey = await fetchQuantumRandomBytes(32);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    rawKey,
     { name: "AES-GCM", length: 256 },
-    true,
+    false,           // no exportable una vez importada
     ["encrypt", "decrypt"]
   );
 
-  const rawKey = await crypto.subtle.exportKey("raw", cryptoKey);
-
   await chrome.storage.local.set({
-    encKeyRaw: Array.from(new Uint8Array(rawKey))
+    encKeyRaw: Array.from(rawKey)
   });
 
   return cryptoKey;
+}
+
+async function fetchQuantumRandomBytes(nBytes) {
+  // Ajusta el endpoint según la doc de http://qrng.cesga.es:8000/docs
+  const response = await fetch(
+    `http://qrng.cesga.es:8000/api/get_random_bytes?size=${nBytes}`,
+    { method: "GET" }
+  );
+
+  if (!response.ok) {
+    throw new Error(`QRNG error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json();
+
+  // Adaptar según el formato real de la respuesta.
+  // Posibilidades habituales:
+  //   { bytes: [12, 45, ...] }  → new Uint8Array(data.bytes)
+  //   { hex: "0aff..." }        → hexToUint8Array(data.hex)
+  //   { data: [...] }           → new Uint8Array(data.data)
+
+  if (Array.isArray(data.bytes)) {
+    return new Uint8Array(data.bytes);
+  } else if (typeof data.hex === "string") {
+    return hexToUint8Array(data.hex);
+  } else if (Array.isArray(data.data)) {
+    return new Uint8Array(data.data);
+  }
+
+  throw new Error("Formato de respuesta QRNG desconocido: " + JSON.stringify(data));
+}
+
+function hexToUint8Array(hex) {
+  if (hex.length % 2 !== 0) throw new Error("Hex string con longitud impar");
+  const arr = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < arr.length; i++) {
+    arr[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return arr;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
