@@ -72,8 +72,6 @@ async function fetchCredentials() {
             }
         }*/
 
-        console.log("holaaaaaaaaaaaaaa");
-
         renderTable(credentials);
 
     } catch (err) {
