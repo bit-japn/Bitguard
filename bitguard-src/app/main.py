@@ -5,31 +5,18 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine
 from app import models
 
-import threading
-from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
-import uvicorn
-import os
-
-
-# -----------------------------
-# Database Init
-# -----------------------------
-
 models.base.metadata.create_all(bind=engine)
 
 from app.models import VaultEntry
 from app.schemas import EntryCreate
-
-
-# -----------------------------
-# FastAPI App
-# -----------------------------
 
 app = FastAPI(
     title="BitGuard API",
     description="Gestor de credenciales encriptado, creado con FastAPI y MySQL.",
     version="0.4.0",
 )
+
+# CORS (#TODO: restricciones)
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,11 +26,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# -----------------------------
-# DB Dependency
-# -----------------------------
-
 def get_db():
     db = SessionLocal()
     try:
@@ -52,10 +34,7 @@ def get_db():
         db.close()
 
 
-# -----------------------------
 # CREATE
-# -----------------------------
-
 @app.post("/vault/entries")
 def create_entry(entry: EntryCreate, db: Session = Depends(get_db)):
 
@@ -73,31 +52,27 @@ def create_entry(entry: EntryCreate, db: Session = Depends(get_db)):
     return {"status": "credenciales guardadas"}
 
 
-# -----------------------------
 # READ
-# -----------------------------
-
 @app.get("/vault/entries")
 def get_entries(db: Session = Depends(get_db)):
 
     entries = db.query(VaultEntry).all()
 
-    return [
-        {
+    result = []
+
+    for e in entries:
+        result.append({
             "vault_id": e.vault_id,
             "entry_id": e.entry_id,
             "url": e.url,
             "usr": e.usr,
             "pwd": e.pwd
-        }
-        for e in entries
-    ]
+        })
+
+    return result
 
 
-# -----------------------------
 # UPDATE
-# -----------------------------
-
 @app.put("/vault/entries/{entry_id}")
 def update_entry(entry_id: str, entry: EntryCreate, db: Session = Depends(get_db)):
 
@@ -117,10 +92,7 @@ def update_entry(entry_id: str, entry: EntryCreate, db: Session = Depends(get_db
     return {"status": "credenciales actualizadas"}
 
 
-# -----------------------------
 # DELETE
-# -----------------------------
-
 @app.delete("/vault/entries/{entry_id}")
 def delete_entry(entry_id: str, db: Session = Depends(get_db)):
 
@@ -137,47 +109,19 @@ def delete_entry(entry_id: str, db: Session = Depends(get_db)):
     return {"status": "credenciales eliminadas"}
 
 
-# -----------------------------
-# Ping
-# -----------------------------
+# Uvicorn and ping
 
 @app.get("/ping")
 def ping():
     return {"status": "running"}
 
 
-# -----------------------------
-# Server Starters
-# -----------------------------
-
-def start_api():
-    uvicorn.run(
-        app,
-        host="0.0.0.0",   # IMPORTANT for Debian server
-        port=8048,
-        reload=False,
-        access_log=False
-    )
-
-
-def start_static_server():
-    # If you have a frontend folder, uncomment:
-    # os.chdir("frontend")
-
-    server = ThreadingHTTPServer(
-        ("0.0.0.0", 3000),  # Bind to all interfaces
-        SimpleHTTPRequestHandler
-    )
-    print("Static server running on port 3000")
-    server.serve_forever()
-
-
-# -----------------------------
-# Entry Point
-# -----------------------------
+import uvicorn
 
 if __name__ == "__main__":
-    api_thread = threading.Thread(target=start_api, daemon=True)
-    api_thread.start()
-
-    start_static_server()
+    uvicorn.run(
+        app,
+        host="127.0.0.1",
+        port=8048,
+        reload=False
+    )
