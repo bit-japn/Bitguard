@@ -7,6 +7,15 @@ const VAULT_ORIGIN = "http://localhost:3000";
 // 1. Criptografía y Seguridad (Core V1)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Obtener bytes aleatorios reales del servicio QRNG del CESGA (cúantica)
+async function getQRNGBytes(length = 12) {
+    const res = await fetch(`https://qrng.anu.edu.au/API/jsonI.php?length=${length}&type=uint8`);
+    if (!res.ok) throw new Error("QRNG request failed");
+    const data = await res.json();
+    if (data.success !== true) throw new Error("QRNG API error");
+    return new Uint8Array(data.data);
+}
+
 // The encryption key is stored in chrome.storage.local as a raw byte array.
 // On first run we generate a new AES‑GCM key and persist it; afterwards we
 // import the same bytes so the key is stable across browser restarts.
@@ -46,7 +55,7 @@ async function decryptField(encryptedPayload, cryptoKey) {
 
 // mirror of vault page's decryptField; needed when background saves entries
 async function encryptField(plaintext, cryptoKey) {
-    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const iv = await getQRNGBytes(12);
     const encoded = new TextEncoder().encode(plaintext);
     const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, cryptoKey, encoded);
 
