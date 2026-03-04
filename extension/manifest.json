@@ -21,9 +21,10 @@
       "run_at": "document_idle"
     },
     {
-      "matches": ["http://localhost:3000/*"],
-      "js": ["content-bridge.js"],
-      "run_at": "document_idle"
+      "matches": ["http://127.0.0.1:3000/*",
+                  "http://localhost:3000/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
     }
   ],
   "background": {

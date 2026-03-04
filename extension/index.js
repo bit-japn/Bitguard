@@ -9,9 +9,24 @@ let cryptoKey = null;
 
 // Ask background for AES key via runtime messaging (vault is part of extension).
 async function requestKeyFromBackground() {
-    const resp = await chrome.runtime.sendMessage({ type: "REQUEST_AES_KEY_FROM_VAULT" });
-    if (resp && resp.success && resp.keyBase64) return resp.keyBase64;
-    throw new Error("failed to obtain AES key from background");
+    return new Promise((resolve, reject) => {
+        // Listen once for the response
+        function handleMessage(event) {
+            if (event.data?.type === "AES_KEY_RESPONSE") {
+                window.removeEventListener("message", handleMessage);
+                if (event.data.success && event.data.keyBase64) {
+                    resolve(event.data.keyBase64);
+                } else {
+                    reject(new Error(event.data.error || "Failed to get AES key"));
+                }
+            }
+        }
+
+        window.addEventListener("message", handleMessage);
+
+        // Send request to content script
+        window.postMessage({ type: "REQUEST_AES_KEY" }, "*");
+    });
 }
 
 async function getEncryptionKey() {
@@ -59,18 +74,26 @@ async function fetchCredentials() {
             return;
         }
 
-        // Wait for AES key before decrypting
-        // const cryptoKey = await getEncryptionKey();
+        let cryptoKey = null;
+        try {
+            cryptoKey = await getEncryptionKey(); // uses requestKeyFromBackground -> postMessage
+        } catch (e) {
+            console.error("Failed to get crypto key:", e);
+            tableBody.innerHTML = `<tr><td colspan="4">Cannot obtain encryption key.</td></tr>`;
+            return;
+        }
 
-        // Decrypt usernames immediately
-        /*for (const cred of credentials) {
+        for (const cred of credentials) {
             try {
-                cred.usr = await decryptField(cred.usr, cryptoKey);
+                // Only decrypt if the field exists
+                if (cred.usr) {
+                    cred.usr = await decryptField(cred.usr, cryptoKey);
+                }
             } catch (e) {
                 console.error("Username decrypt failed:", e);
                 cred.usr = "[decrypt error]";
             }
-        }*/
+        }
 
         renderTable(credentials);
 
@@ -125,7 +148,7 @@ function renderTable(data) {
             <td>
                 <div class="password-cell">
                     <span class="password-text">••••••••</span>
-                    <button class="eye-btn">👁</button>
+                    <button class="eye-btn"></button>
                 </div>
             </td>
             <td>
@@ -142,35 +165,36 @@ function renderTable(data) {
         const eyeBtn = row.querySelector(".eye-btn");
         const passwordText = row.querySelector(".password-text");
 
+        eyeBtn.innerHTML = eyeOpenSVG();
+
         let decryptedCache = null;
         let visible = false;
 
         eyeBtn.addEventListener("click", async () => {
 
             if (!decryptedCache) {
-              const cryptoKey = await getEncryptionKey();
-              if (!cryptoKey) {
-                passwordText.textContent = "No key";
-                return;
-              }
-          
-              try {
-                // Decrypt directly from cred.pwd column
-                decryptedCache = await decryptField(cred.pwd, cryptoKey);
-              } catch (e) {
-                passwordText.textContent = "Decrypt error";
-                return;
-              }
+                const cryptoKey = await getEncryptionKey();
+                if (!cryptoKey) {
+                    passwordText.textContent = "No key";
+                    return;
+                }
+
+                try {
+                    decryptedCache = await decryptField(cred.pwd, cryptoKey);
+                } catch (e) {
+                    passwordText.textContent = "Decrypt error";
+                    return;
+                }
             }
-          
+
             visible = !visible;
-          
+
             passwordText.textContent = visible
-                ? decryptedCache       // show plaintext when revealed
-                : "••••••••";          // hide when toggled off
-          
+                ? decryptedCache
+                : "••••••••";
+
             eyeBtn.innerHTML = visible ? eyeClosedSVG() : eyeOpenSVG();
-          });
+        });
 
         tableBody.appendChild(row);
     });

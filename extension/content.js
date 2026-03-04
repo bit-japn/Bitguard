@@ -47,7 +47,7 @@
 
   // Catch forms injected dynamically (SPAs)
   const observer = new MutationObserver(() => scanAllForms());
-  observer.observe(document.body, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 
   // Also listen for click on submit buttons (some forms skip submit event)
   document.addEventListener("click", (e) => {
@@ -76,5 +76,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
     }
+  }
+});
+
+// Listen for messages from the page
+window.addEventListener("message", async (event) => {
+  if (event.data?.type === "REQUEST_AES_KEY") {
+    // Ask the background for the key
+    const response = await new Promise((resolve) =>
+      chrome.runtime.sendMessage(
+        { type: "REQUEST_AES_KEY_FROM_CONTENT_SCRIPT" },
+        resolve
+      )
+    );
+
+    // Forward response back to the website
+    window.postMessage(
+      {
+        type: "AES_KEY_RESPONSE",
+        keyBase64: response.keyBase64,
+        success: response.success,
+        error: response.error
+      },
+      "*"
+    );
   }
 });

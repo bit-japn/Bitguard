@@ -25,7 +25,7 @@ async function getOrCreateEncryptionKey() {
     if (stored.encKeyRaw) {
         const rawKey = new Uint8Array(stored.encKeyRaw);
         return crypto.subtle.importKey(
-            "raw", rawKey, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]
+            "raw", rawKey, { name: "AES-GCM" }, true, ["encrypt", "decrypt"]
         );
     }
 
@@ -197,6 +197,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ success: true, user: usr, password: pwd });
         })();
         return true;
+    }
+    
+    if (message.type === "REQUEST_AES_KEY_FROM_CONTENT_SCRIPT") {
+        (async () => {
+            try {
+                const cryptoKey = await getOrCreateEncryptionKey();
+                const rawKey = await crypto.subtle.exportKey("raw", cryptoKey);
+                const base64Key = btoa(String.fromCharCode(...new Uint8Array(rawKey)));
+
+                // Only allow requests coming from content scripts
+                if (!sender.tab) {
+                    // sender.tab exists only for content scripts, not webpages
+                    sendResponse({ success: false, error: "Unauthorized" });
+                    return;
+                }
+
+                sendResponse({ success: true, keyBase64: base64Key });
+            } catch (err) {
+                sendResponse({ success: false, error: err.message });
+            }
+        })();
+        return true; // keep sendResponse async
     }
 });
 

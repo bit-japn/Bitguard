@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = "sqlite:///./vault/bgdb.db"
+DATABASE_URL = "sqlite:///./bgdb.db"
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, connect_args={"check_same_thread": False})
 
